@@ -22,11 +22,11 @@ struct BrowserView: View {
                 }
                 if model.busy { ProgressView("正在加载片单…").frame(maxWidth: .infinity).padding(.vertical, 28) }
                 if model.hasMore && !model.busy {
-                    Button { Task { await model.load(reset: false) } } label: { Text("加载更多").frame(maxWidth: .infinity).frame(minHeight: 44) }.buttonStyle(.bordered)
+                    Button { Task { await model.load(reset: false) } } label: { Text("加载更多").frame(maxWidth: .infinity).frame(minHeight: 44) }.wbGlassButton()
                 }
             }.padding(WeBoxTheme.gutter)
         }
-        .background(WeBoxTheme.background)
+        .background(WeBoxBackdrop())
         .navigationTitle(model.source.title).navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .searchable(text: $model.query, prompt: model.searchable ? "搜索当前内容源" : "此内容源没有搜索功能")
@@ -55,9 +55,11 @@ struct BrowserView: View {
     @ViewBuilder private var browseControls: some View {
         if model.modules.count > 1 {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) { ForEach(model.modules) { module in
-                    Button { model.selectedModule = module.id; Task { await model.changeModule() } } label: { SourceChip(title: module.title, selected: model.selectedModule == module.id) }.buttonStyle(.plain).disabled(model.busy)
-                } }
+                WeBoxGlassGroup(spacing: 8) {
+                    HStack(spacing: 8) { ForEach(model.modules) { module in
+                        Button { model.selectedModule = module.id; Task { await model.changeModule() } } label: { SourceChip(title: module.title, selected: model.selectedModule == module.id) }.buttonStyle(.plain).disabled(model.busy)
+                    } }
+                }
             }
         }
         if !model.items.isEmpty {
@@ -103,7 +105,7 @@ struct DetailView: View {
                 if !model.streams.isEmpty { playbackSources }
             }.padding(WeBoxTheme.gutter)
         }
-        .background(WeBoxTheme.background)
+        .background(WeBoxBackdrop())
         .navigationTitle("影片详情").navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task { await model.start() }
@@ -120,7 +122,7 @@ struct DetailView: View {
                 Button { library.toggleFavorite(model.detail, sourceID: model.source.id) } label: {
                     Label(library.isFavorite(model.detail, sourceID: model.source.id) ? "已加入收藏" : "加入收藏", systemImage: library.isFavorite(model.detail, sourceID: model.source.id) ? "heart.fill" : "heart")
                         .font(.subheadline).frame(minHeight: 36)
-                }.buttonStyle(.bordered)
+                }.wbGlassButton()
                 Spacer(minLength: 0)
             }.frame(minHeight: 180, alignment: .topLeading)
             Spacer(minLength: 0)
@@ -132,7 +134,7 @@ struct DetailView: View {
         return Button { Task { await play(first) } } label: {
             Label(position > 0 ? "继续观看 · \(Int(position / 60)) 分钟" : "立即播放", systemImage: "play.fill")
                 .font(.headline).frame(maxWidth: .infinity).frame(minHeight: 42)
-        }.buttonStyle(.borderedProminent).disabled(model.busy)
+        }.wbGlassButton(prominent: true).disabled(model.busy)
     }
     @ViewBuilder private var episodeGroups: some View {
         let groups = Array(Set(model.detail.children.map(\.group))).sorted()
@@ -166,7 +168,7 @@ struct DetailView: View {
                     }.padding(.horizontal, 16).padding(.vertical, 4)
                     if source.id != model.streams.last?.id { Divider().padding(.leading, 16) }
                 }
-            }.background(WeBoxTheme.card, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius))
+            }.wbGlassCard()
         }
     }
     @MainActor private func play(_ episode: ContentItem) async {

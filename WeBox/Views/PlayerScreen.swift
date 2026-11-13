@@ -75,16 +75,19 @@ struct PlayerScreen: View {
                         Button("mpv · 多格式") { engine = "mpv"; startPlayback() }
                         Button(filling ? "适应画面" : "填充画面") { filling.toggle(); mpv?.aspect(filling ? "fill" : "fit") }
                         ForEach([0.5, 1.0, 1.25, 1.5, 2.0], id: \.self) { value in Button("\(value, specifier: "%.2g")×") { speed = value; model?.player.rate = Float(value); mpv?.speed(value) } }
-                    } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44)
+                            .wbGlass(Circle(), tint: Color.black.opacity(0.35), fallbackFill: Color.black.opacity(0.5))
+                    }
                 }
                 if engine == "mpv", let mpv {
                     HStack {
                         Button { mpv.seek(-15) } label: { Image(systemName: "gobackward.15") }
                         Button { mpv.togglePause() } label: { Image(systemName: mpv.paused ? "play.fill" : "pause.fill") }
                         Button { mpv.seek(15) } label: { Image(systemName: "goforward.15") }
-                    }.font(.title2).buttonStyle(.bordered).padding(.vertical)
+                    }.font(.title2).wbGlassButton().padding(.vertical)
                 }
-                if let error = engine == "mpv" ? mpv?.error : model?.error { Text(error).font(.callout).padding().background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 12)) }
+                if let error = engine == "mpv" ? mpv?.error : model?.error { Text(error).font(.callout).padding().wbGlass(RoundedRectangle(cornerRadius: 12, style: .continuous), tint: Color.black.opacity(0.5), fallbackFill: Color.black.opacity(0.85)) }
             }.padding()
         }
         .onAppear { startPlayback() }

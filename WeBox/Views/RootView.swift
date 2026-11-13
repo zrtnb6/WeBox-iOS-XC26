@@ -5,16 +5,27 @@ import AVKit
 struct RootView: View {
     @EnvironmentObject private var library: LibraryStore
     var body: some View {
+        Group {
+            // iOS 26 的标签栏本身就是玻璃材质，再加一个滚动收起行为，把画面让给内容。
+            if #available(iOS 26.0, *) {
+                tabs.tabBarMinimizeBehavior(.onScrollDown)
+            } else {
+                tabs
+            }
+        }
+        .tint(WeBoxTheme.accent)
+        .alert("提示", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
+            Button("知道了") { library.error = nil }
+        } message: { Text(library.error ?? "") }
+    }
+
+    private var tabs: some View {
         TabView {
             NavigationStack { DiscoverView() }.tabItem { Label("发现", systemImage: "sparkles.tv") }
             NavigationStack { SavedListView(history: false) }.tabItem { Label("收藏", systemImage: "heart") }
             NavigationStack { DownloadsView() }.tabItem { Label("下载", systemImage: "arrow.down.circle") }
             NavigationStack { SettingsView() }.tabItem { Label("设置", systemImage: "gearshape") }
         }
-        .tint(WeBoxTheme.accent)
-        .alert("提示", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
-            Button("知道了") { library.error = nil }
-        } message: { Text(library.error ?? "") }
     }
 }
 
@@ -66,7 +77,7 @@ struct SourcesView: View {
                 do { try await library.importFileAsync(result.get()) } catch { library.error = error.localizedDescription }
             }
         }
-        .overlay { if importingFile { ProgressView("正在导入内容源…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius)) } }
+        .overlay { if importingFile { ProgressView("正在导入内容源…").padding(24).wbGlassCard() } }
     }
 }
 
@@ -122,7 +133,7 @@ struct ImportSourceView: View {
                     do { try await library.importFileAsync(result.get()); dismiss() } catch { self.error = error.localizedDescription }
                 }
             }
-            .overlay { if busy && mode == 2 { ProgressView("正在处理文件…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius)) } }
+            .overlay { if busy && mode == 2 { ProgressView("正在处理文件…").padding(24).wbGlassCard() } }
             .interactiveDismissDisabled(busy)
         }
     }

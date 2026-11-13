@@ -1,65 +1,140 @@
-name: Build iOS
+name: Build iOS (Xcode 26 · Liquid Glass)
+
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
+
 permissions:
-  contents: read
+  contents: write
+
 jobs:
   build:
-    runs-on: macos-15
-    timeout-minutes: 30
+    # macos-26 镜像自带 Xcode 26 / iOS 26 SDK，产物即启用 Liquid Glass 新设计。
+    runs-on: macos-26
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26 and prove the SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== Installed Xcodes =="
+          ls -d /Applications/Xcode*.app
+          ls -d /Applications/Xcode*.app | sort -V | tail -1 | xargs -I{} sudo xcode-select -s "{}"
+          echo "== xcodebuild =="
+          xcodebuild -version
+          echo "== iPhoneOS SDK =="
+          SDK=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "SDK=$SDK"
+          case "$SDK" in
+            26.*) echo "OK: building against iOS 26 SDK (Liquid Glass enabled by default)" ;;
+            *) echo "::error::Expected iOS 26 SDK, got $SDK"; exit 1 ;;
+          esac
+
       - name: Install XcodeGen
         run: brew install xcodegen
+
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: |
+          xcodegen --version
+          xcodegen generate
+
+      - name: Cache SwiftPM binary dependencies (MPVKit)
+        uses: actions/cache@v4
+        with:
+          path: build/SPM
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
+
+      - name: Resolve packages
+        run: |
+          mkdir -p build
+          xcodebuild -resolvePackageDependencies -project WeBox.xcodeproj -scheme WeBox \
+            -clonedSourcePackagesDirPath build/SPM | tee build-resolve.log
+
       - name: Build and run integration tests
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p build
           SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for devices in d["devices"].values() for x in devices if "iPhone" in x["name"]))')
-          xcodebuild test -project WeBox.xcodeproj -scheme WeBox -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -parallel-testing-enabled NO -derivedDataPath build/DerivedData -resultBundlePath build/TestResults.xcresult CODE_SIGNING_ALLOWED=NO | tee build-test.log
+          xcodebuild test -project WeBox.xcodeproj -scheme WeBox \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO \
+            -derivedDataPath build/DerivedData \
+            -clonedSourcePackagesDirPath build/SPM \
+            -resultBundlePath build/TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO | tee build-test.log
           echo "$SIMULATOR_ID" > build/simulator-id.txt
-      - name: Capture application launch
-        timeout-minutes: 2
+
+      - name: Capture application launch (Liquid Glass screenshot)
+        timeout-minutes: 3
         continue-on-error: true
         shell: bash
         run: |
-          SIMULATOR_ID=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((x["udid"] for devices in d["devices"].values() for x in devices if "iPhone" in x["name"]), ""))')
-          if [ -z "$SIMULATOR_ID" ]; then
-            echo "No booted test simulator; skipping optional screenshot."
-            exit 0
-          fi
+          SIMULATOR_ID=$(cat build/simulator-id.txt)
+          xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
           xcrun simctl install "$SIMULATOR_ID" build/DerivedData/Build/Products/Debug-iphonesimulator/WeBox.app
           xcrun simctl launch "$SIMULATOR_ID" com.zhangx16.WeBox
-          sleep 3
+          sleep 4
           xcrun simctl io "$SIMULATOR_ID" screenshot build/WeBox-home.png
+
       - name: Archive for iPhone
+        shell: bash
         run: |
           set -o pipefail
-          xcodebuild archive -project WeBox.xcodeproj -scheme WeBox -destination 'generic/platform=iOS' -archivePath build/WeBox.xcarchive CODE_SIGNING_ALLOWED=NO | tee build-archive.log
+          xcodebuild archive -project WeBox.xcodeproj -scheme WeBox \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/WeBox.xcarchive \
+            -clonedSourcePackagesDirPath build/SPM \
+            CODE_SIGNING_ALLOWED=NO | tee build-archive.log
           mkdir -p build/Payload
           cp -R build/WeBox.xcarchive/Products/Applications/WeBox.app build/Payload/
           cd build
           zip -qry WeBox-unsigned.ipa Payload
-      - name: Upload unsigned IPA and Xcode project
+
+      - name: Verify IPA and record build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=build/WeBox.xcarchive/Products/Applications/WeBox.app
+          {
+            echo "### 构建证据"
+            echo
+            echo '```'
+            xcodebuild -version
+            echo "iPhoneOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+            /usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$APP/Info.plist"
+            /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist"
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist"
+            echo "--- LC_BUILD_VERSION ---"
+            otool -l "$APP/WeBox" | grep -A4 LC_BUILD_VERSION | head -12
+            echo "--- 体积 ---"
+            du -sh build/WeBox-unsigned.ipa "$APP"
+            echo "--- 架构 ---"
+            lipo -info "$APP/WeBox"
+            echo '```'
+          } | tee build/evidence.md
+
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: WeBox-iOS-unsigned
           path: |
             build/WeBox-unsigned.ipa
+            build/evidence.md
+            build/WeBox-home.png
             WeBox.xcodeproj
             LICENSE
             README.md
-            build/WeBox-home.png
           retention-days: 30
+
       - name: Upload test results and build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,4 +144,15 @@ jobs:
             build/TestResults.xcresult
             build-test.log
             build-archive.log
+            build-resolve.log
           retention-days: 14
+
+      - name: Publish unsigned IPA to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/WeBox-unsigned.ipa
+          generate_release_notes: true
+          body: |
+            未签名 IPA（Xcode 26 / iOS 26 SDK 构建，已启用 Liquid Glass 外观）。
+            请自行用开发者证书签名或侧载安装。

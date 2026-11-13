@@ -71,9 +71,9 @@ struct InlineErrorView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("暂时无法加载", systemImage: "exclamationmark.triangle").font(.headline)
             Text(message).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
-            if let retry { Button("重试", action: retry).buttonStyle(.bordered) }
+            if let retry { Button("重试", action: retry).wbGlassButton() }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
-            .background(WeBoxTheme.card, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius))
+            .wbGlassCard(cornerRadius: WeBoxTheme.radius)
     }
 }
 
@@ -84,8 +84,8 @@ struct SourceChip: View {
         Text(title).font(.subheadline.weight(selected ? .semibold : .medium)).lineLimit(1)
             .padding(.horizontal, 16).frame(minHeight: 44)
             .foregroundStyle(selected ? WeBoxTheme.accent : Color.primary)
-            .background(selected ? WeBoxTheme.accent.opacity(0.12) : WeBoxTheme.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(selected ? WeBoxTheme.accent.opacity(0.4) : .clear))
+            .wbGlassCapsule(tint: selected ? WeBoxTheme.accent.opacity(0.9) : nil, interactive: true)
+            .contentShape(Capsule())
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

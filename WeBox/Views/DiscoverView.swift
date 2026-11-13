@@ -15,7 +15,7 @@ struct DiscoverView: View {
                     ContentUnavailableView {
                         Label("从一个内容源开始", systemImage: "square.stack.3d.up")
                     } description: { Text("导入你的内容源，建立属于自己的影视库。") }
-                    actions: { Button("添加内容源") { importing = true }.buttonStyle(.borderedProminent) }
+                    actions: { Button("添加内容源") { importing = true }.wbGlassButton(prominent: true) }
                     .padding(.vertical, 30)
                 } else {
                     sourcePicker
@@ -28,7 +28,7 @@ struct DiscoverView: View {
                 }
             }.padding(.horizontal, WeBoxTheme.gutter).padding(.top, 12).padding(.bottom, 30)
         }
-        .background(WeBoxTheme.background)
+        .background(WeBoxBackdrop())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $importing) { ImportSourceView() }
         .sheet(isPresented: $searching) { GlobalSearchView() }
@@ -44,7 +44,7 @@ struct DiscoverView: View {
                 Spacer()
                 Button { importing = true } label: {
                     Image(systemName: "plus").font(.title3.weight(.semibold)).frame(width: 44, height: 44)
-                        .background(WeBoxTheme.card, in: Circle())
+                        .wbGlass(Circle(), interactive: true)
                 }.accessibilityLabel("添加内容源")
             }
             Button { searching = true } label: {
@@ -54,7 +54,7 @@ struct DiscoverView: View {
                     Spacer()
                     Text("全部内容源").font(.caption)
                 }.foregroundStyle(.secondary).padding(.horizontal, 16).frame(minHeight: 50)
-                    .background(WeBoxTheme.card, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius))
+                    .wbGlassCard(interactive: true)
             }.buttonStyle(.plain).accessibilityIdentifier("search.global")
         }
     }
@@ -65,11 +65,13 @@ struct DiscoverView: View {
                     .accessibilityIdentifier("source.manage")
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(library.sources) { source in
-                        Button { selectedSourceID = source.id } label: {
-                            SourceChip(title: source.title, selected: source.id == selectedSource?.id)
-                        }.buttonStyle(.plain)
+                WeBoxGlassGroup(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(library.sources) { source in
+                            Button { selectedSourceID = source.id } label: {
+                                SourceChip(title: source.title, selected: source.id == selectedSource?.id)
+                            }.buttonStyle(.plain)
+                        }
                     }
                 }
             }.contentMargins(.vertical, 1)
@@ -92,7 +94,7 @@ struct DiscoverView: View {
                                     }
                                     Spacer(minLength: 0)
                                 }.padding(12).frame(width: 245, alignment: .leading)
-                                    .background(WeBoxTheme.card, in: RoundedRectangle(cornerRadius: WeBoxTheme.radius))
+                                    .wbGlassCard()
                             }.buttonStyle(.plain)
                         }
                     }
@@ -212,13 +214,15 @@ struct GlobalSearchView: View {
                     HStack { ProgressView(); Text("正在搜索内容源…"); Spacer(); Button("停止") { task?.cancel(); model.cancel() } }.font(.subheadline)
                 }
             }.padding(WeBoxTheme.gutter)
-        }.background(WeBoxTheme.background)
+        }.background(WeBoxBackdrop())
     }
     private var sourceChoices: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(library.sources) { source in
-                    Button { toggleSource(source.id) } label: { SourceChip(title: source.title, selected: selectedSources.contains(source.id)) }.buttonStyle(.plain)
+            WeBoxGlassGroup(spacing: 8) {
+                HStack(spacing: 8) {
+                    ForEach(library.sources) { source in
+                        Button { toggleSource(source.id) } label: { SourceChip(title: source.title, selected: selectedSources.contains(source.id)) }.buttonStyle(.plain)
+                    }
                 }
             }
         }
