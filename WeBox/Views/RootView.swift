@@ -29,6 +29,32 @@ struct RootView: View {
     }
 }
 
+// iOS 26 上 SwiftUI 的 .fileImporter 存在系统级 bug：选择文件后
+// onCompletion 回调可能不触发，表现为"点了文件毫无反应"。
+// 改用 UIKit 原生 UIDocumentPickerViewController（asCopy 直接拿到拷贝，
+// 无需安全作用域），绕开该问题。
+struct DocumentPickerView: UIViewControllerRepresentable {
+    var onPick: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else { return }
+            onPick(url)
+        }
+    }
+}
+
 struct SourcesView: View {
     @EnvironmentObject private var library: LibraryStore
     @State private var importing = false
@@ -71,12 +97,12 @@ struct SourcesView: View {
             Button("从文件导入", systemImage: "doc.badge.plus") { fileImporter = true }
         } label: { Image(systemName: "plus") }.disabled(importingFile) }
         .sheet(isPresented: $importing) { ImportSourceView() }
-        // iOS 26 上 .js 等扩展名的 UTType 判定不稳定，按具体类型过滤会出现文件无法选中；
-        // 放宽到 UTType.item（全部文件），格式校验由导入逻辑负责。
-        .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.item]) { result in
-            Task {
-                importingFile = true; defer { importingFile = false }
-                do { try await library.importFileAsync(result.get()) } catch { library.error = error.localizedDescription }
+        .sheet(isPresented: $fileImporter) {
+            DocumentPickerView { url in
+                Task {
+                    importingFile = true; defer { importingFile = false }
+                    do { try await library.importFileAsync(url) } catch { library.error = error.localizedDescription }
+                }
             }
         }
         .overlay { if importingFile { ProgressView("正在导入内容源…").padding(24).wbGlassCard() } }
@@ -129,10 +155,12 @@ struct ImportSourceView: View {
                     }
                 }
             }
-            .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.item]) { result in
-                Task {
-                    busy = true; error = nil; defer { busy = false }
-                    do { try await library.importFileAsync(result.get()); dismiss() } catch { self.error = error.localizedDescription }
+            .sheet(isPresented: $fileImporter) {
+                DocumentPickerView { url in
+                    Task {
+                        busy = true; error = nil; defer { busy = false }
+                        do { try await library.importFileAsync(url); dismiss() } catch { self.error = error.localizedDescription }
+                    }
                 }
             }
             .overlay { if busy && mode == 2 { ProgressView("正在处理文件…").padding(24).wbGlassCard() } }
@@ -221,8 +249,10 @@ struct SettingsView: View {
             }
         }.navigationTitle("设置")
         .sheet(isPresented: $importing) { ImportSourceView() }
-        .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.json, .data]) { result in
-            Task { do { try await library.importFileAsync(result.get()) } catch { library.error = error.localizedDescription } }
+        .sheet(isPresented: $fileImporter) {
+            DocumentPickerView { url in
+                Task { do { try await library.importFileAsync(url) } catch { library.error = error.localizedDescription } }
+            }
         }
     }
 }
