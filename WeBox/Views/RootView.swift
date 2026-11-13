@@ -71,7 +71,9 @@ struct SourcesView: View {
             Button("从文件导入", systemImage: "doc.badge.plus") { fileImporter = true }
         } label: { Image(systemName: "plus") }.disabled(importingFile) }
         .sheet(isPresented: $importing) { ImportSourceView() }
-        .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.javaScript, .json, .plainText, .data]) { result in
+        // iOS 26 上 .js 等扩展名的 UTType 判定不稳定，按具体类型过滤会出现文件无法选中；
+        // 放宽到 UTType.item（全部文件），格式校验由导入逻辑负责。
+        .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.item]) { result in
             Task {
                 importingFile = true; defer { importingFile = false }
                 do { try await library.importFileAsync(result.get()) } catch { library.error = error.localizedDescription }
@@ -127,7 +129,7 @@ struct ImportSourceView: View {
                     }
                 }
             }
-            .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.javaScript, .json, .plainText, .data]) { result in
+            .fileImporter(isPresented: $fileImporter, allowedContentTypes: [.item]) { result in
                 Task {
                     busy = true; error = nil; defer { busy = false }
                     do { try await library.importFileAsync(result.get()); dismiss() } catch { self.error = error.localizedDescription }
